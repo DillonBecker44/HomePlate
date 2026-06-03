@@ -8,6 +8,7 @@ const supabase = createClient(
 function ReviewsSection({ chefId }: { chefId: string }) {
   const [reviews, setReviews] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
     supabase
@@ -16,7 +17,7 @@ function ReviewsSection({ chefId }: { chefId: string }) {
       .eq('chef_id', chefId)
       .eq('is_visible', true)
       .order('created_at', { ascending: false })
-      .limit(10)
+      .limit(20)
       .then(({ data }) => {
         if (data) setReviews(data)
         setLoading(false)
@@ -26,12 +27,14 @@ function ReviewsSection({ chefId }: { chefId: string }) {
   if (loading) return null
   if (reviews.length === 0) return null
 
+  const displayed = showAll ? reviews : reviews.slice(0, 3)
+
   return (
     <div style={{ padding: '16px 20px', background: '#fff', borderBottom: '1px solid #E8DDD4' }}>
       <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '16px', marginBottom: '12px' }}>
         Reviews ({reviews.length})
       </div>
-      {reviews.map(review => (
+      {displayed.map(review => (
         <div key={review.id} style={{ paddingBottom: '12px', marginBottom: '12px', borderBottom: '1px solid #E8DDD4' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
             <div style={{ fontWeight: 500, fontSize: '13px' }}>{review.profiles?.full_name || 'Customer'}</div>
@@ -43,6 +46,14 @@ function ReviewsSection({ chefId }: { chefId: string }) {
           </div>
         </div>
       ))}
+      {reviews.length > 3 && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          style={{ fontSize: '13px', color: '#C4622D', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'DM Sans, sans-serif' }}
+        >
+          {showAll ? 'Show less' : `Show all ${reviews.length} reviews`}
+        </button>
+      )}
     </div>
   )
 }
