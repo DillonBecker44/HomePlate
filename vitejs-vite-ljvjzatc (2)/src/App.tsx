@@ -575,6 +575,18 @@ supabase.auth.getSession().then(({ data: { session: s } }) => {
             <span style={{ fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '99px', background: order.status === 'picked_up' ? '#EAF0E0' : order.status === 'accepted' ? '#E6F1FB' : order.status === 'pending' ? '#FEF3C7' : '#F3F4F6', color: order.status === 'picked_up' ? '#2D5016' : order.status === 'accepted' ? '#185FA5' : order.status === 'pending' ? '#92400E' : '#6B7280' }}>
               {order.status}
             </span>
+           {order.status === 'ready' && (
+  <button
+    onClick={async () => {
+      await supabase.from('orders').update({
+        status: 'picked_up',
+        picked_up_at: new Date().toISOString()
+      }).eq('id', order.id)
+      loadMyOrders()
+    }}
+    style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '99px', border: 'none', background: '#2D5016', color: '#fff', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+  >Confirm pickup</button>
+)}
             {order.status === 'picked_up' && (
               <button
                 onClick={() => { setReviewOrderId(order.id); setReviewChefId(order.chef_id); setReviewChefName(order.chef_profiles?.kitchen_name); setShowReviewForm(true); setScreen('review') }}
