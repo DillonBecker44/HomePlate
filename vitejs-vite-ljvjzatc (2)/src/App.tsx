@@ -561,9 +561,16 @@ async function placeOrder() {
               <div style={{ fontSize: '13px', color: '#2C1A0E' }}>{selectedChef.kitchen_name} · {selectedChef.address_line}, {selectedChef.city}, TX</div>
             </div>
             {message && <div style={{ ...msgBox(isError), marginTop: '12px' }}>{message}</div>}
-            <button style={{ ...btn, marginTop: '16px' }} onClick={placeOrder} disabled={loading}>
-              {loading ? 'Processing…' : `Place order — pay $${cartTotal().total.toFixed(2)}`}
-            </button>
+            <div id="payment-element-container" style={{ marginBottom: '12px' }}></div>
+{!(window as any)._stripeElements ? (
+  <button style={{ ...btn, marginTop: '4px' }} onClick={placeOrder} disabled={loading}>
+    {loading ? 'Loading payment form…' : `Place order — pay $${cartTotal().total.toFixed(2)}`}
+  </button>
+) : (
+  <button style={{ ...btn, marginTop: '4px' }} onClick={submitPayment} disabled={loading}>
+    {loading ? 'Processing…' : `Pay $${cartTotal().total.toFixed(2)}`}
+  </button>
+)}
           </div>
         </div>
       )}
