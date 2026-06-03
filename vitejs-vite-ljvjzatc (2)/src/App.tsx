@@ -166,7 +166,10 @@ async function loadOrders(chefId: string) {
       .order('sort_order')
     setSelectedChef(freshChef || chef)
     setSelectedChefMenu(data || [])
-    setCart({})
+    setCart({});
+    (window as any)._stripeElements = null;
+    (window as any)._stripe = null;
+    setPaymentReady(false)
     setScreen('chef-menu')
   }
 
@@ -719,7 +722,7 @@ supabase.auth.getSession().then(({ data: { session: s } }) => {
       {screen === 'cart' && selectedChef && (
         <div>
           <div style={{ background: '#fff', borderBottom: '1px solid #E8DDD4', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button onClick={() => { setScreen('chef-menu'); setLoading(false); setMessage('') }} style={{ background: '#F0E4D8', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '16px', color: '#2C1A0E' }}>←</button>
+            <button onClick={() => { setScreen('chef-menu'); setLoading(false); setMessage(''); (window as any)._stripeElements = null; (window as any)._stripe = null; setPaymentReady(false) }} style={{ background: '#F0E4D8', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '16px', color: '#2C1A0E' }}>←</button>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '18px' }}>Your order</div>
           </div>
           <div style={{ padding: '16px 20px' }}>
