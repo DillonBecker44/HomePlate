@@ -369,7 +369,7 @@ paymentElement.mount('#payment-element-container')
           await supabase.from('order_items').insert(orderItems)
       // Notify chef by email (non-blocking)
 supabase.auth.getSession().then(({ data: { session: s } }) => {
-  fetch(``${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rapid-processor`, {
+  fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rapid-processor`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
