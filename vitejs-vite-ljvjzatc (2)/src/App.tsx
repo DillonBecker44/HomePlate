@@ -5,6 +5,47 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
+function ReviewsSection({ chefId }: { chefId: string }) {
+  const [reviews, setReviews] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase
+      .from('reviews')
+      .select(`*, profiles(full_name)`)
+      .eq('chef_id', chefId)
+      .eq('is_visible', true)
+      .order('created_at', { ascending: false })
+      .limit(10)
+      .then(({ data }) => {
+        if (data) setReviews(data)
+        setLoading(false)
+      })
+  }, [chefId])
+
+  if (loading) return null
+  if (reviews.length === 0) return null
+
+  return (
+    <div style={{ padding: '16px 20px', background: '#fff', borderBottom: '1px solid #E8DDD4' }}>
+      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '16px', marginBottom: '12px' }}>
+        Reviews ({reviews.length})
+      </div>
+      {reviews.map(review => (
+        <div key={review.id} style={{ paddingBottom: '12px', marginBottom: '12px', borderBottom: '1px solid #E8DDD4' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <div style={{ fontWeight: 500, fontSize: '13px' }}>{review.profiles?.full_name || 'Customer'}</div>
+            <div style={{ color: '#D4A84B', fontSize: '13px' }}>{'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}</div>
+          </div>
+          {review.comment && <div style={{ fontSize: '13px', color: '#6B6560', lineHeight: 1.5 }}>{review.comment}</div>}
+          <div style={{ fontSize: '11px', color: '#B0A89E', marginTop: '4px' }}>
+            {new Date(review.created_at).toLocaleDateString()}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
 function OrderCountdown({ expiresAt, onExpire }: { expiresAt: string, onExpire: () => void }) {
   const [secondsLeft, setSecondsLeft] = useState(() => {
     const diff = Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)
@@ -662,6 +703,7 @@ supabase.auth.getSession().then(({ data: { session: s } }) => {
               <div style={{ fontSize: '13px', color: '#6B6560', lineHeight: 1.6 }}>{selectedChef.bio}</div>
             </div>
           )}
+          <ReviewsSection chefId={selectedChef.id} />
           <div style={{ padding: '16px 20px' }}>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '18px', marginBottom: '14px' }}>Menu</div>
             {selectedChefMenu.length === 0 && (
