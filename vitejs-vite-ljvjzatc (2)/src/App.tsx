@@ -367,15 +367,17 @@ paymentElement.mount('#payment-element-container')
             }
           })
           await supabase.from('order_items').insert(orderItems)
-          // Notify chef by email
-await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-chef`, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-    'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-  },
-  body: JSON.stringify({ order_id: order.id })
+      // Notify chef by email (non-blocking)
+supabase.auth.getSession().then(({ data: { session: s } }) => {
+  fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-chef`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${s?.access_token}`,
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+    },
+    body: JSON.stringify({ order_id: order.id })
+  }).catch(e => console.log('Notification error:', e))
 })
         }
 
