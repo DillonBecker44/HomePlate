@@ -150,6 +150,7 @@ async function loadOrders(chefId: string) {
       .select('*')
       .eq('id', chef.id)
       .single()
+    console.log('Fresh chef is_open:', freshChef?.is_open)
     const { data } = await supabase
       .from('menu_items').select('*')
       .eq('chef_id', chef.id)
