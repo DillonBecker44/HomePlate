@@ -37,6 +37,7 @@ export default function App() {
   const [itemDesc, setItemDesc] = useState('')
   const [itemPrice, setItemPrice] = useState('')
   const [orderPlaced, setOrderPlaced] = useState(false)
+  const [paymentReady, setPaymentReady] = useState(false)
 
   useEffect(() => {
     loadChefs()
@@ -181,7 +182,7 @@ export default function App() {
   }
 
 async function placeOrder() {
-    setLoading(true); setMessage(''); setIsError(false)
+    setLoading(true); setMessage(''); setIsError(false); setPaymentReady(false)
     try {
       const total = cartTotal().total
       const { data: { session: currentSession } } = await supabase.auth.getSession()
@@ -221,7 +222,8 @@ async function placeOrder() {
       const container = document.getElementById('payment-element-container')
       if (container) {
         container.innerHTML = ''
-        paymentElement.mount('#payment-element-container')
+        paymentElement.on('ready', () => setPaymentReady(true))
+paymentElement.mount('#payment-element-container')
         setLoading(false)
         setMessage('Enter your card details below and click Pay')
         setIsError(false)
@@ -567,9 +569,9 @@ async function placeOrder() {
     {loading ? 'Loading payment form…' : `Place order — pay $${cartTotal().total.toFixed(2)}`}
   </button>
 ) : (
-  <button style={{ ...btn, marginTop: '4px' }} onClick={submitPayment} disabled={loading}>
-    {loading ? 'Processing…' : `Pay $${cartTotal().total.toFixed(2)}`}
-  </button>
+ <button style={{ ...btn, marginTop: '4px' }} onClick={submitPayment} disabled={loading || !paymentReady}>
+    {loading ? 'Processing…' : !paymentReady ? 'Loading card form…' : `Pay $${cartTotal().total.toFixed(2)}`}
+  </button> 
 )}
           </div>
         </div>
