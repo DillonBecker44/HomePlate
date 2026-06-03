@@ -180,15 +180,10 @@ export default function App() {
     setCuisines(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
   }
 
-  async function placeOrder() {
+async function placeOrder() {
     setLoading(true); setMessage(''); setIsError(false)
     try {
-      const subtotal = Object.entries(cart).reduce((sum, [id, qty]) => {
-        const item = selectedChefMenu.find(i => i.id === id)
-        return sum + (item ? item.price * (qty as number) : 0)
-      }, 0)
-      const total = subtotal * 1.10
-
+      const total = cartTotal().total
       const { data: { session: currentSession } } = await supabase.auth.getSession()
 
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-payment-intent`, {
@@ -204,44 +199,70 @@ export default function App() {
       const { clientSecret, error } = await res.json()
       if (error) { setMessage(error); setIsError(true); setLoading(false); return }
 
-      const stripe = await new Promise<any>((resolve) => {
+      const stripe = await new Promise<any>((resolve, reject) => {
+        const existing = document.querySelector('script[src="https://js.stripe.com/v3/"]')
+        if (existing && (window as any).Stripe) {
+          resolve((window as any).Stripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY))
+          return
+        }
         const script = document.createElement('script')
         script.src = 'https://js.stripe.com/v3/'
         script.onload = () => resolve((window as any).Stripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY))
+        script.onerror = () => reject(new Error('Failed to load Stripe'))
         document.head.appendChild(script)
       })
-if (!stripe) {
-  setMessage('Could not load payment processor. Please try again.')
-  setIsError(true)
-  setLoading(false)
-  return
-}
-      if (!stripe) { setMessage('Stripe failed to load'); setIsError(true); setLoading(false); return }
 
-      const { error: stripeError } = await stripe.confirmPayment({
-        clientSecret,
-        confirmParams: {
-          return_url: window.location.href,
-          payment_method_data: {
-            billing_details: { email: session.user.email }
-          }
-        }
+      if (!stripe) { setMessage('Could not load payment processor'); setIsError(true); setLoading(false); return }
+
+      const elements = stripe.elements({ clientSecret })
+      const paymentElement = elements.create('payment')
+
+      // Mount payment element
+      const container = document.getElementById('payment-element-container')
+      if (container) {
+        container.innerHTML = ''
+        paymentElement.mount('#payment-element-container')
+        setLoading(false)
+        setMessage('Enter your card details below and click Pay')
+        setIsError(false)
+
+        // Store for submission
+        ;(window as any)._stripeElements = elements
+        ;(window as any)._stripe = stripe
+      }
+    } catch (e: any) {
+      setMessage(e.message || 'Something went wrong')
+      setIsError(true)
+      setLoading(false)
+    }
+  }
+
+  async function submitPayment() {
+    setLoading(true); setMessage(''); setIsError(false)
+    try {
+      const stripe = (window as any)._stripe
+      const elements = (window as any)._stripeElements
+      if (!stripe || !elements) { setMessage('Please click Place Order first'); setIsError(true); setLoading(false); return }
+
+      const { error } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: 'if_required'
       })
 
-      if (stripeError) {
-        setMessage(stripeError.message || 'Payment failed')
+      if (error) {
+        setMessage(error.message || 'Payment failed')
         setIsError(true)
       } else {
-        setOrderPlaced(true)
         setCart({})
         setScreen('order-confirmed')
       }
     } catch (e: any) {
-      setMessage(e.message); setIsError(true)
+      setMessage(e.message || 'Payment failed')
+      setIsError(true)
     }
     setLoading(false)
   }
-
   const cartTotal = () => {
     const subtotal = Object.entries(cart).reduce((sum, [id, qty]) => {
       const item = selectedChefMenu.find(i => i.id === id)
