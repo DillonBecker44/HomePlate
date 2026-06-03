@@ -106,6 +106,7 @@ export default function App() {
       else setScreen('chef-onboarding')
     } else {
       loadMyOrders()
+      loadChefs()
       setScreen('browse')
     }
   }
