@@ -68,6 +68,13 @@ export default function App() {
   const [itemDesc, setItemDesc] = useState('')
   const [itemPrice, setItemPrice] = useState('')
   const [orderPlaced, setOrderPlaced] = useState(false)
+  const [showReviewForm, setShowReviewForm] = useState(false)
+  const [reviewOrderId, setReviewOrderId] = useState<string | null>(null)
+  const [reviewChefId, setReviewChefId] = useState<string | null>(null)
+  const [reviewRating, setReviewRating] = useState(0)
+  const [reviewComment, setReviewComment] = useState('')
+  const [reviewChefName, setReviewChefName] = useState('')
+  const [myOrders, setMyOrders] = useState<any[]>([])
   const [paymentReady, setPaymentReady] = useState(false)
 
   useEffect(() => {
@@ -98,6 +105,7 @@ export default function App() {
       if (chef) { setChefProfile(chef); loadMenuItems(sess.user.id); loadOrders(sess.user.id); setScreen('chef-portal') }
       else setScreen('chef-onboarding')
     } else {
+      loadMyOrders()
       setScreen('browse')
     }
   }
@@ -250,7 +258,34 @@ async function loadOrders(chefId: string) {
     await supabase.from('menu_items').delete().eq('id', id)
     await loadMenuItems(session.user.id)
   }
+async function loadMyOrders() {
+    const { data } = await supabase
+      .from('orders')
+      .select(`*, chef_profiles(kitchen_name)`)
+      .eq('customer_id', session.user.id)
+      .order('placed_at', { ascending: false })
+    if (data) setMyOrders(data)
+  }
 
+  async function submitReview() {
+    if (reviewRating === 0) { setMessage('Please select a star rating'); setIsError(true); return }
+    setLoading(true); setMessage(''); setIsError(false)
+    const { error } = await supabase.from('reviews').insert({
+      order_id: reviewOrderId,
+      customer_id: session.user.id,
+      chef_id: reviewChefId,
+      rating: reviewRating,
+      comment: reviewComment,
+    })
+    if (error) { setMessage(error.message); setIsError(true); setLoading(false); return }
+    setShowReviewForm(false)
+    setReviewRating(0)
+    setReviewComment('')
+    setMessage('Review submitted! Thank you.')
+    setIsError(false)
+    setLoading(false)
+    loadMyOrders()
+  }
   function toggleCuisine(c: string) {
     setCuisines(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
   }
@@ -515,6 +550,40 @@ supabase.auth.getSession().then(({ data: { session: s } }) => {
                 </div>
               ))}
           </div>
+          {session && profile?.role === 'customer' && (
+  <div style={{ margin: '0 16px 24px', background: '#fff', borderRadius: '12px', border: '1px solid #E8DDD4', padding: '16px' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+      <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '16px' }}>Your orders</div>
+      <button onClick={loadMyOrders} style={{ fontSize: '12px', color: '#C4622D', background: 'none', border: 'none', cursor: 'pointer' }}>Refresh</button>
+    </div>
+    {myOrders.length === 0 && (
+      <div style={{ fontSize: '13px', color: '#6B6560', textAlign: 'center', padding: '16px 0' }}>No orders yet</div>
+    )}
+    {myOrders.map(order => (
+      <div key={order.id} style={{ padding: '12px 0', borderBottom: '1px solid #E8DDD4' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontWeight: 500, fontSize: '13px' }}>{order.chef_profiles?.kitchen_name}</div>
+            <div style={{ fontSize: '11px', color: '#6B6560', marginTop: '2px' }}>
+              {new Date(order.placed_at).toLocaleDateString()} · ${parseFloat(order.total).toFixed(2)}
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '99px', background: order.status === 'picked_up' ? '#EAF0E0' : order.status === 'accepted' ? '#E6F1FB' : order.status === 'pending' ? '#FEF3C7' : '#F3F4F6', color: order.status === 'picked_up' ? '#2D5016' : order.status === 'accepted' ? '#185FA5' : order.status === 'pending' ? '#92400E' : '#6B7280' }}>
+              {order.status}
+            </span>
+            {order.status === 'picked_up' && (
+              <button
+                onClick={() => { setReviewOrderId(order.id); setReviewChefId(order.chef_id); setReviewChefName(order.chef_profiles?.kitchen_name); setShowReviewForm(true); setScreen('review') }}
+                style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '99px', border: 'none', background: '#C4622D', color: '#fff', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+              >Rate</button>
+            )}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
           {!session && (
             <div style={{ margin: '0 16px 24px', background: '#F0E4D8', borderRadius: '12px', padding: '16px', textAlign: 'center' }}>
               <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: '#2C1A0E' }}>Ready to order?</div>
@@ -715,6 +784,34 @@ supabase.auth.getSession().then(({ data: { session: s } }) => {
       )}
 
       {/* CHEF ONBOARDING */}
+      {screen === 'review' && (
+  <div style={{ ...card, maxWidth: '480px' }}>
+    <button onClick={() => setScreen('browse')} style={{ background: '#F0E4D8', border: 'none', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', fontSize: '16px', color: '#2C1A0E', marginBottom: '16px' }}>←</button>
+    <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '22px', marginBottom: '4px' }}>Leave a review</div>
+    <div style={{ fontSize: '13px', color: '#6B6560', marginBottom: '24px' }}>for {reviewChefName}</div>
+    <div style={{ marginBottom: '20px' }}>
+      <div style={{ fontSize: '12px', fontWeight: 500, color: '#6B6560', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '10px' }}>Your rating *</div>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        {[1,2,3,4,5].map(star => (
+          <button
+            key={star}
+            onClick={() => setReviewRating(star)}
+            style={{ fontSize: '32px', background: 'none', border: 'none', cursor: 'pointer', opacity: star <= reviewRating ? 1 : 0.3, transition: 'opacity .15s' }}
+          >★</button>
+        ))}
+      </div>
+    </div>
+    <label style={{ fontSize: '12px', fontWeight: 500, color: '#6B6560', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '6px', display: 'block' }}>Comment (optional)</label>
+    <textarea
+      style={{ ...ta }}
+      placeholder="What did you love about the food?"
+      value={reviewComment}
+      onChange={e => setReviewComment(e.target.value)}
+    />
+    {message && <div style={msgBox(isError)}>{message}</div>}
+    <button style={btn} onClick={submitReview} disabled={loading}>{loading ? 'Submitting…' : 'Submit review'}</button>
+  </div>
+)}
       {screen === 'chef-onboarding' && (
         <div style={{ ...card, maxWidth: '500px' }}>
           <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '22px', marginBottom: '4px' }}>Set up your kitchen</div>
