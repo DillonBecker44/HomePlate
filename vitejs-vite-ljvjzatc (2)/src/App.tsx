@@ -5,7 +5,36 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
+function OrderCountdown({ expiresAt, onExpire }: { expiresAt: string, onExpire: () => void }) {
+  const [secondsLeft, setSecondsLeft] = useState(() => {
+    const diff = Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000)
+    return Math.max(0, diff)
+  })
 
+  useEffect(() => {
+    if (secondsLeft <= 0) { onExpire(); return }
+    const interval = setInterval(() => {
+      setSecondsLeft(prev => {
+        if (prev <= 1) { clearInterval(interval); onExpire(); return 0 }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const mins = Math.floor(secondsLeft / 60)
+  const secs = secondsLeft % 60
+  const urgent = secondsLeft < 120
+
+  return (
+    <div style={{ background: urgent ? '#FCEBEB' : '#FEF3C7', borderRadius: '8px', padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: '13px', color: urgent ? '#A32D2D' : '#92400E' }}>Time to respond</span>
+      <span style={{ fontFamily: 'Playfair Display, serif', fontSize: '20px', fontWeight: 700, color: urgent ? '#A32D2D' : '#92400E' }}>
+        {mins}:{String(secs).padStart(2, '0')}
+      </span>
+    </div>
+  )
+}
 export default function App() {
   const [session, setSession] = useState<any>(null)
   const [screen, setScreen] = useState('home')
@@ -20,6 +49,8 @@ export default function App() {
   const [chefProfile, setChefProfile] = useState<any>(null)
   const [menuItems, setMenuItems] = useState<any[]>([])
   const [portalTab, setPortalTab] = useState('dashboard')
+  const [incomingOrders, setIncomingOrders] = useState<any[]>([])
+  const [activeOrders, setActiveOrders] = useState<any[]>([])
   const [chefs, setChefs] = useState<any[]>([])
   const [chefSearch, setChefSearch] = useState('')
   const [selectedChef, setSelectedChef] = useState<any>(null)
@@ -64,7 +95,7 @@ export default function App() {
     setProfile(prof)
     if (prof.role === 'chef') {
       const { data: chef } = await supabase.from('chef_profiles').select('*').eq('id', sess.user.id).single()
-      if (chef) { setChefProfile(chef); loadMenuItems(sess.user.id); setScreen('chef-portal') }
+      if (chef) { setChefProfile(chef); loadMenuItems(sess.user.id); loadOrders(sess.user.id); setScreen('chef-portal') }
       else setScreen('chef-onboarding')
     } else {
       setScreen('browse')
@@ -75,7 +106,44 @@ export default function App() {
     const { data } = await supabase.from('menu_items').select('*').eq('chef_id', chefId).order('sort_order')
     if (data) setMenuItems(data)
   }
+async function loadOrders(chefId: string) {
+    const { data: pending } = await supabase
+      .from('orders')
+      .select(`*, profiles(full_name)`)
+      .eq('chef_id', chefId)
+      .eq('status', 'pending')
+      .order('placed_at', { ascending: false })
+    if (pending) setIncomingOrders(pending)
 
+    const { data: active } = await supabase
+      .from('orders')
+      .select(`*, profiles(full_name)`)
+      .eq('chef_id', chefId)
+      .in('status', ['accepted', 'ready'])
+      .order('placed_at', { ascending: false })
+    if (active) setActiveOrders(active)
+  }
+
+  async function acceptOrder(orderId: string) {
+    await supabase.from('orders').update({
+      status: 'accepted',
+      accepted_at: new Date().toISOString()
+    }).eq('id', orderId)
+    await loadOrders(session.user.id)
+  }
+
+  async function declineOrder(orderId: string) {
+    await supabase.from('orders').update({ status: 'declined' }).eq('id', orderId)
+    await loadOrders(session.user.id)
+  }
+
+  async function markReady(orderId: string) {
+    await supabase.from('orders').update({
+      status: 'ready',
+      ready_at: new Date().toISOString()
+    }).eq('id', orderId)
+    await loadOrders(session.user.id)
+  }
   async function openChef(chef: any) {
     const { data } = await supabase
       .from('menu_items').select('*')
@@ -676,11 +744,89 @@ paymentElement.mount('#payment-element-container')
           </div>
 
           <div style={{ background: '#fff', borderBottom: '1px solid #E8DDD4', display: 'flex', overflowX: 'auto', padding: '0 8px' }}>
-            {[['dashboard', '📊 Dashboard'], ['menu', '🍽️ Menu'], ['hours', '🕐 Hours']].map(([id, label]) => (
+           {[['orders', `🔔 Orders${incomingOrders.length > 0 ? ` (${incomingOrders.length})` : ''}`], ['dashboard', '📊 Dashboard'], ['menu', '🍽️ Menu'], ['hours', '🕐 Hours']].map(([id, label]) => (
               <button key={id} style={tabS(portalTab === id)} onClick={() => setPortalTab(id)}>{label}</button>
             ))}
           </div>
+{portalTab === 'orders' && (
+  <div style={{ padding: '20px' }}>
+    {incomingOrders.length === 0 && activeOrders.length === 0 && (
+      <div style={{ textAlign: 'center', padding: '40px 20px', background: '#fff', borderRadius: '14px', border: '1px solid #E8DDD4' }}>
+        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🍽️</div>
+        <div style={{ fontWeight: 500, marginBottom: '6px' }}>No orders yet</div>
+        <div style={{ fontSize: '13px', color: '#6B6560' }}>New orders will appear here instantly</div>
+      </div>
+    )}
 
+    {incomingOrders.length > 0 && (
+      <>
+        <div style={{ fontSize: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em', color: '#C4622D', marginBottom: '12px' }}>⏱ Needs response</div>
+        {incomingOrders.map(order => (
+          <div key={order.id} style={{ background: '#fff', border: '2px solid #C4622D', borderRadius: '14px', padding: '16px', marginBottom: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '15px' }}>{order.profiles?.full_name || 'Customer'}</div>
+                <div style={{ fontSize: '12px', color: '#6B6560', marginTop: '2px' }}>
+                  {new Date(order.placed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 600, fontSize: '16px', color: '#2C1A0E' }}>${parseFloat(order.chef_payout).toFixed(2)}</div>
+                <div style={{ fontSize: '11px', color: '#2D5016' }}>your earnings</div>
+              </div>
+            </div>
+            <OrderCountdown expiresAt={order.expires_at} onExpire={() => loadOrders(session.user.id)} />
+            <div style={{ display: 'flex', gap: '10px', marginTop: '12px' }}>
+              <button
+                onClick={() => acceptOrder(order.id)}
+                style={{ flex: 1, padding: '12px', borderRadius: '99px', border: 'none', background: '#2D5016', color: '#fff', fontSize: '14px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+              >Accept ✓</button>
+              <button
+                onClick={() => declineOrder(order.id)}
+                style={{ flex: 1, padding: '12px', borderRadius: '99px', border: '1.5px solid #E8DDD4', background: '#fff', color: '#6B6560', fontSize: '14px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+              >Decline</button>
+            </div>
+          </div>
+        ))}
+      </>
+    )}
+
+    {activeOrders.length > 0 && (
+      <>
+        <div style={{ fontSize: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.06em', color: '#6B6560', marginBottom: '12px', marginTop: incomingOrders.length > 0 ? '20px' : '0' }}>Active orders</div>
+        {activeOrders.map(order => (
+          <div key={order.id} style={{ background: '#fff', border: '1px solid #E8DDD4', borderRadius: '14px', padding: '16px', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '15px' }}>{order.profiles?.full_name || 'Customer'}</div>
+                <div style={{ fontSize: '12px', color: '#6B6560', marginTop: '2px' }}>
+                  {new Date(order.placed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+              <span style={{ fontSize: '11px', fontWeight: 500, padding: '4px 10px', borderRadius: '99px', background: order.status === 'ready' ? '#FEF3C7' : '#EAF0E0', color: order.status === 'ready' ? '#92400E' : '#2D5016' }}>
+                {order.status === 'ready' ? 'Ready for pickup' : 'Cooking'}
+              </span>
+            </div>
+            <div style={{ fontSize: '14px', fontWeight: 500, color: '#C4622D', marginBottom: '12px' }}>${parseFloat(order.chef_payout).toFixed(2)} earnings</div>
+            {order.status === 'accepted' && (
+              <button
+                onClick={() => markReady(order.id)}
+                style={{ width: '100%', padding: '11px', borderRadius: '99px', border: 'none', background: '#2C1A0E', color: '#fff', fontSize: '13px', fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}
+              >Mark as ready for pickup</button>
+            )}
+            {order.status === 'ready' && (
+              <div style={{ textAlign: 'center', fontSize: '13px', color: '#92400E', fontWeight: 500 }}>⏳ Waiting for customer pickup</div>
+            )}
+          </div>
+        ))}
+      </>
+    )}
+
+    <button onClick={() => loadOrders(session.user.id)} style={{ width: '100%', padding: '11px', borderRadius: '99px', border: '1.5px solid #E8DDD4', background: '#fff', color: '#6B6560', fontSize: '13px', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', marginTop: '12px' }}>
+      🔄 Refresh orders
+    </button>
+  </div>
+)}
           {portalTab === 'dashboard' && (
             <div style={{ padding: '20px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
