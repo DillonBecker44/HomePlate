@@ -145,12 +145,17 @@ async function loadOrders(chefId: string) {
     await loadOrders(session.user.id)
   }
   async function openChef(chef: any) {
+    const { data: freshChef } = await supabase
+      .from('chef_profiles')
+      .select('*')
+      .eq('id', chef.id)
+      .single()
     const { data } = await supabase
       .from('menu_items').select('*')
       .eq('chef_id', chef.id)
       .eq('is_available', true)
       .order('sort_order')
-    setSelectedChef(chef)
+    setSelectedChef(freshChef || chef)
     setSelectedChefMenu(data || [])
     setCart({})
     setScreen('chef-menu')
