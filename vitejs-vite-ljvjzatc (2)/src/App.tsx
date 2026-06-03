@@ -256,6 +256,45 @@ paymentElement.mount('#payment-element-container')
         setMessage(error.message || 'Payment failed')
         setIsError(true)
       } else {
+        // Save order to database
+        const subtotal = cartTotal().subtotal
+        const fee = cartTotal().fee
+        const total = cartTotal().total
+
+        const { data: order, error: orderError } = await supabase
+          .from('orders')
+          .insert({
+            customer_id: session.user.id,
+            chef_id: selectedChef.id,
+            status: 'pending',
+            subtotal,
+            platform_fee: fee,
+            total,
+            chef_payout: subtotal * 0.90,
+            placed_at: new Date().toISOString(),
+            expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          })
+          .select()
+          .single()
+
+        if (orderError) {
+          console.error('Order save error:', orderError)
+        } else {
+          // Save order items
+          const orderItems = Object.entries(cart).map(([id, qty]) => {
+            const item = selectedChefMenu.find(i => i.id === id)
+            return {
+              order_id: order.id,
+              menu_item_id: id,
+              name: item.name,
+              price: item.price,
+              quantity: qty,
+              subtotal: item.price * (qty as number)
+            }
+          })
+          await supabase.from('order_items').insert(orderItems)
+        }
+
         setCart({})
         setScreen('order-confirmed')
       }
